@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wixl Mobile Updated</title>
+<style>
+body { margin:0; padding:0; font-family: Arial,sans-serif; height:100vh; background:#111; color:white; overflow:hidden;}
+.screen { display:none; position:absolute; top:0; left:0; width:100%; height:100%; flex-direction:column; align-items:center; justify-content:center; }
+.active { display:flex; }
+.btn { position:absolute; padding:10px 20px; border:none; border-radius:10px; background:#444; color:white; font-size:18px; cursor:pointer; }
+.pos-center { top:50%; left:50%; transform:translate(-50%,-50%); }
+.pos-top { top:10px; left:50%; transform:translateX(-50%); }
+.pos-bottom { bottom:10px; left:50%; transform:translateX(-50%); }
+.pos-left-top { top:10px; left:10px; }
+.pos-right-top { top:10px; right:10px; }
+.pos-left-bottom { bottom:10px; left:10px; }
+.pos-right-bottom { bottom:10px; right:10px; }
+.text { position:absolute; font-size:18px; padding:5px 10px; background:rgba(255,255,255,0.1); border-radius:5px; color:white; }
+img { position:absolute; max-width:80%; max-height:60%; }
+</style>
+</head>
+<body>
+
+<script>
+function runWixl(code){
+  const lines = code.split("\n").map(l=>l.trim()).filter(l=>l);
+  const screens = {};
+  let currentScreen = "1";
+  const variables = {};
+  const events = {};
+
+  function createScreen(id){
+    if(!screens[id]){
+      const el=document.createElement("div");
+      el.className="screen";
+      el.dataset.id=id;
+      document.body.appendChild(el);
+      screens[id]=el;
+    }
+    return screens[id];
+  }
+
+  function showScreen(id){
+    Object.values(screens).forEach(s=>s.classList.remove("active"));
+    screens[id].classList.add("active");
+    currentScreen=id;
+  }
+
+  function parsePos(pos){
+    return pos.toLowerCase()
+      .replace("центр","center")
+      .replace("верх","top")
+      .replace("низ","bottom")
+      .replace("левый верхний угол","left-top")
+      .replace("правый верхний угол","right-top")
+      .replace("левый нижний угол","left-bottom")
+      .replace("правый нижний угол","right-bottom");
+  }
+
+  function addElement(type, text, pos, screen, color){
+    let el;
+    if(type==="кнопка"){
+      el=document.createElement("button");
+      el.textContent=text;
+      el.className="btn pos-"+pos;
+    } else if(type==="текст"){
+      el=document.createElement("div");
+      el.className="text pos-"+pos;
+      el.textContent=text;
+      if(color) el.style.color=color;
+    } else if(type==="картинка"){
+      el=document.createElement("img");
+      el.src=text;
+      el.className="pos-"+pos;
+    }
+    screens[screen].appendChild(el);
+    return el;
+  }
+
+  // создаем первый экран по умолчанию
+  createScreen("1");
+  showScreen("1");
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+
+    // Создание экранов
+    if(line.startsWith("Экран")){
+      const id=line.match(/"(.+?)"/)[1];
+      createScreen(id);
+      currentScreen=id;
+      continue;
+    }
+
+    // Переменные
+    if(line.startsWith("переменная") && line.includes("появится")){
+      const name=line.match(/"(.+?)"/)[1];
+      variables[name]=0;
+      const div=document.createElement("div");
+      div.className="text pos-top";
+      div.id="var-"+name;
+      div.textContent=`${name}: 0`;
+      screens[currentScreen].appendChild(div);
+      continue;
+    }
+
+    // Текст
+    if(line.startsWith("в ")){
+      const txtMatch=line.match(/"(.+?)"(?: (\w+))?/);
+      if(txtMatch){
+        const text=txtMatch[1];
+        const color=txtMatch[2]||"white";
+        const posMatch=line.match(/в (".+?"|\S+)/i);
+        const pos=parsePos(posMatch?posMatch[1].replace(/"/g,""):"центр");
+        addElement("текст",text,pos,currentScreen,color);
+        continue;
+      }
+    }
+
+    // Кнопки
+    if(line.startsWith("кнопка")){
+      const btnMatch=line.match(/"(.+?)"(?: в (".+?"|\S+))?/i);
+      const name=btnMatch[1];
+      const pos=parsePos(btnMatch[2]?btnMatch[2].replace(/"/g,""):"центр");
+      const btn=addElement("кнопка",name,pos,currentScreen);
+      events[name]=btn;
+      continue;
+    }
+
+    // События на кнопки
+    if(line.startsWith("когда") && line.includes("?")){
+      const btnName=line.match(/"(.+?)"/)[1];
+      const nextLine=lines[i+1];
+      if(!events[btnName] || !nextLine) continue;
+
+      events[btnName].addEventListener("click", ()=>{
+        // Добавление текста
+        if(nextLine.includes("в ")){
+          const textMatch=nextLine.match(/"(.+?)"/);
+          const posMatch=nextLine.match(/в (".+?"|\S+)/i);
+          if(textMatch){
+            const text=textMatch[1];
+            const pos=parsePos(posMatch?posMatch[1].replace(/"/g,""):"центр");
+            addElement("текст",text,pos,currentScreen);
+          }
+        }
+        // Переход на экран
+        if(nextLine.includes("открыть экран")){
+          const target=nextLine.match(/"(.+?)"/)[1];
+          showScreen(target);
+        }
+        // Добавление к переменной
+        if(nextLine.includes("добавить к переменной")){
+          const vname=nextLine.match(/"(.+?)"/)[1];
+          const value=parseInt(nextLine.split("значение")[1]);
+          variables[vname]+=value;
+          const el=document.getElementById("var-"+vname);
+          if(el) el.textContent=`${vname}: ${variables[vname]}`;
+        }
+      });
+    }
+  }
+}
+
+// Пример кода
+const wixlCode=`
+Экран "1":
+  в центр "Привет"
+  кнопка "дальше" в правый нижний угол
+  переменная "счёт" появится
+
+когда "дальше" нажата ? 
+  в центр "Спасибо, что нажал"
+  открыть экран "2"
+  добавить к переменной "счёт" значение 1
+
+Экран "2":
+  в центр "Ты на экране 2"
+  кнопка "БАМ" в центр
+
+когда "БАМ" нажата ? 
+  добавить к переменной "счёт" значение 2
+`;
+
+runWixl(wixlCode);
+</script>
+
+</body>
+</html>
