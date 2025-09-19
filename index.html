@@ -3,187 +3,269 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wixl Mobile Updated</title>
+<title>Plinko Game</title>
 <style>
-body { margin:0; padding:0; font-family: Arial,sans-serif; height:100vh; background:#111; color:white; overflow:hidden;}
-.screen { display:none; position:absolute; top:0; left:0; width:100%; height:100%; flex-direction:column; align-items:center; justify-content:center; }
-.active { display:flex; }
-.btn { position:absolute; padding:10px 20px; border:none; border-radius:10px; background:#444; color:white; font-size:18px; cursor:pointer; }
-.pos-center { top:50%; left:50%; transform:translate(-50%,-50%); }
-.pos-top { top:10px; left:50%; transform:translateX(-50%); }
-.pos-bottom { bottom:10px; left:50%; transform:translateX(-50%); }
-.pos-left-top { top:10px; left:10px; }
-.pos-right-top { top:10px; right:10px; }
-.pos-left-bottom { bottom:10px; left:10px; }
-.pos-right-bottom { bottom:10px; right:10px; }
-.text { position:absolute; font-size:18px; padding:5px 10px; background:rgba(255,255,255,0.1); border-radius:5px; color:white; }
-img { position:absolute; max-width:80%; max-height:60%; }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #222;
+    color: white;
+    text-align: center;
+  }
+  header {
+    background: #111;
+    padding: 10px;
+    font-size: 18px;
+  }
+  #coins {
+    font-weight: bold;
+    color: #ffd700;
+  }
+  .btn {
+    background: linear-gradient(to bottom, #ff7b00, #e55b00);
+    border: none;
+    color: white;
+    font-size: 18px;
+    padding: 15px 25px;
+    margin: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px #993d00;
+    transition: all 0.2s;
+  }
+  .btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px #662900;
+  }
+
+  .page { display: none; padding: 20px; }
+  .active { display: block; }
+
+  /* Навигация */
+  .nav {
+    position: fixed;
+    bottom: 0; left: 0;
+    width: 100%;
+    display: flex;
+    background: #111;
+  }
+  .nav button {
+    flex: 1;
+    padding: 15px;
+    font-size: 16px;
+    border: none;
+    background: #333;
+    color: white;
+    cursor: pointer;
+  }
+  .nav button.active { background: #ff7b00; }
+
+  /* Plinko */
+  #plinkoBoard {
+    position: relative;
+    margin: 20px auto;
+    width: 300px;
+    height: 400px;
+    background: #444;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .peg {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: white;
+    border-radius: 50%;
+  }
+  .ball {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    background: yellow;
+    border-radius: 50%;
+  }
+  .slot {
+    position: absolute;
+    bottom: 0;
+    width: 60px;
+    height: 40px;
+    background: #666;
+    border: 1px solid #999;
+    color: white;
+    line-height: 40px;
+    font-weight: bold;
+  }
+
+  /* Модалка */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+  }
+  .modal-content {
+    background: #333;
+    margin: 20% auto;
+    padding: 20px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 400px;
+    color: white;
+  }
+  .close-btn {
+    margin-top: 15px;
+    background: #ff7b00;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
 
+<!-- Заработок -->
+<div id="earnPage" class="page active">
+  <header>💰 Монеты: <span id="coins">0</span></header>
+  <h2>Заработок</h2>
+  <p>Зажимай кнопку, чтобы копить монеты!</p>
+  <button class="btn" id="holdBtn">👆 Удерживай</button>
+</div>
+
+<!-- Plinko -->
+<div id="plinkoPage" class="page">
+  <header>💰 Монеты: <span id="coinsPlinko">0</span></header>
+  <h2>Plinko</h2>
+  <button class="btn" onclick="dropBall()">Запустить шарик (5 монет)</button>
+  <div id="plinkoBoard"></div>
+</div>
+
+<!-- Навигация -->
+<div class="nav">
+  <button id="navEarn" class="active" onclick="showPage('earnPage')">Заработок</button>
+  <button id="navPlinko" onclick="showPage('plinkoPage')">Plinko</button>
+</div>
+
+<!-- Модалка результата -->
+<div id="resultModal" class="modal">
+  <div class="modal-content">
+    <h2>🎉 Результат</h2>
+    <p id="resultText"></p>
+    <button class="close-btn" onclick="closeResult()">OK</button>
+  </div>
+</div>
+
 <script>
-function runWixl(code){
-  const lines = code.split("\n").map(l=>l.trim()).filter(l=>l);
-  const screens = {};
-  let currentScreen = "1";
-  const variables = {};
-  const events = {};
+  let coins = parseInt(localStorage.getItem("coins")) || 0;
+  let coinDisplay = document.getElementById("coins");
+  let coinDisplay2 = document.getElementById("coinsPlinko");
+  updateCoins(0);
 
-  function createScreen(id){
-    if(!screens[id]){
-      const el=document.createElement("div");
-      el.className="screen";
-      el.dataset.id=id;
-      document.body.appendChild(el);
-      screens[id]=el;
-    }
-    return screens[id];
+  function updateCoins(val) {
+    coins += val;
+    if (coins < 0) coins = 0;
+    localStorage.setItem("coins", coins);
+    coinDisplay.textContent = coins;
+    coinDisplay2.textContent = coins;
   }
 
-  function showScreen(id){
-    Object.values(screens).forEach(s=>s.classList.remove("active"));
-    screens[id].classList.add("active");
-    currentScreen=id;
+  // Навигация
+  function showPage(id) {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    document.querySelectorAll(".nav button").forEach(b => b.classList.remove("active"));
+    if (id === "earnPage") document.getElementById("navEarn").classList.add("active");
+    if (id === "plinkoPage") document.getElementById("navPlinko").classList.add("active");
   }
 
-  function parsePos(pos){
-    return pos.toLowerCase()
-      .replace("центр","center")
-      .replace("верх","top")
-      .replace("низ","bottom")
-      .replace("левый верхний угол","left-top")
-      .replace("правый верхний угол","right-top")
-      .replace("левый нижний угол","left-bottom")
-      .replace("правый нижний угол","right-bottom");
-  }
+  // Удерживание
+  let holdInterval;
+  let holdBtn = document.getElementById("holdBtn");
+  holdBtn.addEventListener("mousedown", () => {
+    holdInterval = setInterval(() => updateCoins(1), 1000);
+  });
+  holdBtn.addEventListener("mouseup", () => clearInterval(holdInterval));
+  holdBtn.addEventListener("mouseleave", () => clearInterval(holdInterval));
+  holdBtn.addEventListener("touchstart", () => {
+    holdInterval = setInterval(() => updateCoins(1), 1000);
+  });
+  holdBtn.addEventListener("touchend", () => clearInterval(holdInterval));
 
-  function addElement(type, text, pos, screen, color){
-    let el;
-    if(type==="кнопка"){
-      el=document.createElement("button");
-      el.textContent=text;
-      el.className="btn pos-"+pos;
-    } else if(type==="текст"){
-      el=document.createElement("div");
-      el.className="text pos-"+pos;
-      el.textContent=text;
-      if(color) el.style.color=color;
-    } else if(type==="картинка"){
-      el=document.createElement("img");
-      el.src=text;
-      el.className="pos-"+pos;
-    }
-    screens[screen].appendChild(el);
-    return el;
-  }
-
-  // создаем первый экран по умолчанию
-  createScreen("1");
-  showScreen("1");
-
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i];
-
-    // Создание экранов
-    if(line.startsWith("Экран")){
-      const id=line.match(/"(.+?)"/)[1];
-      createScreen(id);
-      currentScreen=id;
-      continue;
-    }
-
-    // Переменные
-    if(line.startsWith("переменная") && line.includes("появится")){
-      const name=line.match(/"(.+?)"/)[1];
-      variables[name]=0;
-      const div=document.createElement("div");
-      div.className="text pos-top";
-      div.id="var-"+name;
-      div.textContent=`${name}: 0`;
-      screens[currentScreen].appendChild(div);
-      continue;
-    }
-
-    // Текст
-    if(line.startsWith("в ")){
-      const txtMatch=line.match(/"(.+?)"(?: (\w+))?/);
-      if(txtMatch){
-        const text=txtMatch[1];
-        const color=txtMatch[2]||"white";
-        const posMatch=line.match(/в (".+?"|\S+)/i);
-        const pos=parsePos(posMatch?posMatch[1].replace(/"/g,""):"центр");
-        addElement("текст",text,pos,currentScreen,color);
-        continue;
+  // Plinko
+  let board = document.getElementById("plinkoBoard");
+  let prizes = [10, 25, 50, 25, 10];
+  function buildBoard() {
+    board.innerHTML = "";
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col <= row; col++) {
+        let peg = document.createElement("div");
+        peg.className = "peg";
+        peg.style.left = (col * 50 + (150 - row*25)) + "px";
+        peg.style.top = (row * 60 + 30) + "px";
+        board.appendChild(peg);
       }
     }
-
-    // Кнопки
-    if(line.startsWith("кнопка")){
-      const btnMatch=line.match(/"(.+?)"(?: в (".+?"|\S+))?/i);
-      const name=btnMatch[1];
-      const pos=parsePos(btnMatch[2]?btnMatch[2].replace(/"/g,""):"центр");
-      const btn=addElement("кнопка",name,pos,currentScreen);
-      events[name]=btn;
-      continue;
-    }
-
-    // События на кнопки
-    if(line.startsWith("когда") && line.includes("?")){
-      const btnName=line.match(/"(.+?)"/)[1];
-      const nextLine=lines[i+1];
-      if(!events[btnName] || !nextLine) continue;
-
-      events[btnName].addEventListener("click", ()=>{
-        // Добавление текста
-        if(nextLine.includes("в ")){
-          const textMatch=nextLine.match(/"(.+?)"/);
-          const posMatch=nextLine.match(/в (".+?"|\S+)/i);
-          if(textMatch){
-            const text=textMatch[1];
-            const pos=parsePos(posMatch?posMatch[1].replace(/"/g,""):"центр");
-            addElement("текст",text,pos,currentScreen);
-          }
-        }
-        // Переход на экран
-        if(nextLine.includes("открыть экран")){
-          const target=nextLine.match(/"(.+?)"/)[1];
-          showScreen(target);
-        }
-        // Добавление к переменной
-        if(nextLine.includes("добавить к переменной")){
-          const vname=nextLine.match(/"(.+?)"/)[1];
-          const value=parseInt(nextLine.split("значение")[1]);
-          variables[vname]+=value;
-          const el=document.getElementById("var-"+vname);
-          if(el) el.textContent=`${vname}: ${variables[vname]}`;
-        }
-      });
+    for (let i = 0; i < 5; i++) {
+      let slot = document.createElement("div");
+      slot.className = "slot";
+      slot.style.left = (i * 60) + "px";
+      slot.textContent = "+" + prizes[i];
+      slot.dataset.prize = prizes[i];
+      board.appendChild(slot);
     }
   }
-}
+  buildBoard();
 
-// Пример кода
-const wixlCode=`
-Экран "1":
-  в центр "Привет"
-  кнопка "дальше" в правый нижний угол
-  переменная "счёт" появится
+  // Шарики
+  let activeBalls = 0;
+  let totalPrize = 0;
 
-когда "дальше" нажата ? 
-  в центр "Спасибо, что нажал"
-  открыть экран "2"
-  добавить к переменной "счёт" значение 1
+  function dropBall() {
+    if (coins < 5) {
+      showResult("Недостаточно монет!"); 
+      return;
+    }
+    updateCoins(-5);
 
-Экран "2":
-  в центр "Ты на экране 2"
-  кнопка "БАМ" в центр
+    let ball = document.createElement("div");
+    ball.className = "ball";
+    ball.style.left = "140px";
+    ball.style.top = "0px";
+    board.appendChild(ball);
 
-когда "БАМ" нажата ? 
-  добавить к переменной "счёт" значение 2
-`;
+    let x = 140, y = 0;
+    activeBalls++;
+    let interval = setInterval(() => {
+      y += 5;
+      x += Math.random() < 0.5 ? -5 : 5;
+      ball.style.top = y + "px";
+      ball.style.left = x + "px";
+      if (y >= 360) {
+        clearInterval(interval);
+        let slotIndex = Math.min(4, Math.max(0, Math.floor(x / 60)));
+        let prize = parseInt(prizes[slotIndex]);
+        totalPrize += prize;
+        activeBalls--;
+        if (activeBalls === 0) {
+          showResult("Вы выиграли " + totalPrize + " монет!");
+          updateCoins(totalPrize);
+          totalPrize = 0;
+        }
+      }
+    }, 50);
+  }
 
-runWixl(wixlCode);
+  // Модалка результата
+  function showResult(text) {
+    document.getElementById("resultText").textContent = text;
+    document.getElementById("resultModal").style.display = "block";
+  }
+  function closeResult() {
+    document.getElementById("resultModal").style.display = "none";
+  }
 </script>
 
 </body>
